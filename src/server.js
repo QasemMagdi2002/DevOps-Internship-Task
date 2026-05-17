@@ -3,10 +3,20 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const morgan = require("morgan");
 require("dotenv").config();
-
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const postsRoutes = require("./routes/routes");
 
 const app = express();
+
+app.use(helmet());
+
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100
+  })
+);
 
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI;
