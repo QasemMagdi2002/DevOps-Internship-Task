@@ -4,3 +4,5 @@ npm-debug.log
 .git
 .gitignore
 README.md
+Dockerfile.dev
+docker-compose.yml
