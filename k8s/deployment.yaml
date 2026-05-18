@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: posts-backend-deployment
+  namespace: posts-app
+  labels:
+    app: posts-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: posts-backend
+  template:
+    metadata:
+      labels:
+        app: posts-backend
+    spec:
+      containers:
+      - name: posts-backend
+        image: posts-backend-api:local
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: posts-backend-config
+        env:
+        - name: MONGO_URI
+          valueFrom:
+            secretKeyRef:
+              name: posts-backend-secret
+              key: MONGO_URI
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        ports:
+        - containerPort: 3000
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          timeoutSeconds: 3

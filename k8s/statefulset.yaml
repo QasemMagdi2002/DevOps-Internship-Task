@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo-headless
+  namespace: posts-app
+  labels:
+    app: mongo
+spec:
+  clusterIP: None
+  selector:
+    app: mongo
+  ports:
+    - name: mongodb
+      port: 27017
+      targetPort: 27017
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo
+  namespace: posts-app
+  labels:
+    app: mongo
+spec:
+  selector:
+    matchLabels:
+      app: mongo
+  serviceName: mongo-headless
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: mongo
+        image: mongo:7.0
+        imagePullPolicy: IfNotPresent
+        command:
+          - mongod
+        args:
+          - --replSet
+          - rs0
+          - --bind_ip_all
+          - --port
+          - "27017"
+        ports:
+        - containerPort: 27017
+          name: mongodb
+        readinessProbe:
+          tcpSocket:
+            port: mongodb
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: mongodb
+          initialDelaySeconds: 30
+          periodSeconds: 20
+        volumeMounts:
+        - name: mongo-data
+          mountPath: /data/db
+  volumeClaimTemplates:
+  - metadata:
+      name: mongo-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
