@@ -150,9 +150,3 @@ The deployment was validated on AWS EKS by checking:
 - HPA scaling from 1 backend pod to 5 backend pods under CPU load.
 - Backend pod deletion and automatic recovery through the Deployment.
 - MongoDB pod deletion and data persistence through StatefulSet PVCs.
-
-## Notes
-
-This repo focuses on deployment practice. It includes the app, container build files, Kubernetes manifests, EKS cluster config, ingress, autoscaling, stateful MongoDB storage, and operational test steps.
-
-The project does not include automated tests yet.
