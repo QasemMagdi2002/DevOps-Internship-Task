@@ -1,5 +1,7 @@
 # DevOps Internship Task
 
+## Setup Instructions: [Open instructions.md](instructions.md)
+
 This repo contains a small Posts Backend API and the DevOps configuration used to containerize it, deploy it to Kubernetes, and run it on Amazon EKS.
 
 The app uses Node.js, Express, and MongoDB. It exposes a CRUD API for posts, stores data through Mongoose, and includes health and CPU load endpoints for Kubernetes checks and autoscaling tests.
@@ -15,36 +17,9 @@ The operational workflow expects:
 - kubectl installed.
 - Helm installed.
 - Docker installed.
-- Docker Hub image pushed and available to the cluster.
 
-## Architecture
 
-```text
-Client
-  |
-  v
-AWS LoadBalancer
-  |
-  v
-NGINX Ingress Controller
-  |
-  v
-posts-backend-service ClusterIP
-  |
-  v
-Posts Backend Deployment
-  |
-  v
-mongo-headless Service
-  |
-  v
-MongoDB StatefulSet: mongo-0, mongo-1, mongo-2
-  |
-  v
-AWS EBS Persistent Volumes
-```
-
-## What was implemented
+## Implementation 
 
 The backend includes:
 
@@ -67,7 +42,6 @@ The deployment includes:
 - NGINX ingress configuration for public HTTP access.
 - HPA configuration that scales the backend from 1 to 5 pods at 70 percent CPU.
 - eksctl cluster configuration for the EKS cluster.
-- EKS load generator manifest for traffic tests.
 
 ## Project structure
 

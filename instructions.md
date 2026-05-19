@@ -13,7 +13,6 @@ Use this workflow from the project root.
 - kubectl installed.
 - Helm installed.
 - Docker installed.
-- Docker Hub image pushed and available to the cluster.
 
 ## 1. Create the EKS cluster
 
@@ -314,27 +313,6 @@ EKS clusters
 EC2 Load Balancers
 EC2 Volumes
 CloudFormation stacks
-```
-
-## Repo reminders
-
-`k8s/eks/statefulset.yaml` already includes:
-
-```yaml
-storageClassName: gp2
-```
-
-inside:
-
-```yaml
-volumeClaimTemplates:
-```
-
-`k8s/eks/deployment.yaml` already uses Docker Hub:
-
-```yaml
-image: qasem2002/posts-backend-api:1.1
-imagePullPolicy: Always
 ```
 
 The EKS deployment was proven working, including Ingress, HPA scaling, MongoDB pod recovery, and persistent data after pod deletion.
