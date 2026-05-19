@@ -2,73 +2,74 @@
 
 ## Setup Instructions: [Open instructions.md](instructions.md)
 
-This repo contains a small Posts Backend API and the DevOps configuration used to containerize it, deploy it to Kubernetes, and run it on Amazon EKS.
+This repo contains a small Posts Backend API along with everything needed to containerize it, deploy it to Kubernetes, and run it on Amazon EKS.
 
-The app uses Node.js, Express, and MongoDB. It exposes a CRUD API for posts, stores data through Mongoose, and includes health and CPU load endpoints for Kubernetes checks and autoscaling tests.
+The app is built with Node.js, Express, and MongoDB. It exposes a CRUD API for posts, persists data through Mongoose, and includes a health endpoint for Kubernetes probes and a CPU load endpoint specifically for testing HPA autoscaling.
 
-The deployment work covers Docker images, Kubernetes workloads, MongoDB stateful storage, ingress routing, replica set initialization, and HPA scaling.
+The deployment side covers Docker images, Kubernetes workloads, MongoDB stateful storage, ingress routing, replica set initialization, and HPA scaling.
 
 ## Prerequisites
 
-The operational workflow expects:
+You'll need the following configured and available before anything works:
 
-- AWS CLI configured with permissions to create EKS resources.
-- eksctl installed.
-- kubectl installed.
-- Helm installed.
-- Docker installed.
+- AWS CLI configured with permissions to create EKS resources
+- eksctl installed
+- kubectl installed
+- Helm installed
+- Docker installed
 
-
-## Implementation 
+## Implementation
 
 The backend includes:
 
-- Express API for posts.
-- Mongoose model for MongoDB documents.
-- CRUD routes for creating, listing, reading, updating, and deleting posts.
-- Middleware for Helmet, CORS, rate limiting, JSON parsing, and request logging.
-- Health endpoint for Kubernetes probes.
-- CPU endpoint for autoscaling tests.
+- Express API for posts
+- Mongoose model for MongoDB documents
+- CRUD routes for creating, listing, reading, updating, and deleting posts
+- Middleware for Helmet, CORS, rate limiting, JSON parsing, and request logging
+- Health endpoint for Kubernetes liveness/readiness probes
+- CPU endpoint for generating short load bursts during HPA tests
 
 The deployment includes:
 
-- Production Dockerfile using a multi stage Node 22 Alpine build.
-- Development Dockerfile using Node 22 Alpine and nodemon.
-- Local Kubernetes manifests under `k8s/local`.
-- EKS Kubernetes manifests under `k8s/eks`.
-- MongoDB StatefulSet with 3 replica set members and persistent storage.
-- MongoDB replica set initialization job.
-- ClusterIP services for internal communication.
-- NGINX ingress configuration for public HTTP access.
-- HPA configuration that scales the backend from 1 to 5 pods at 70 percent CPU.
-- eksctl cluster configuration for the EKS cluster.
+- Production Dockerfile using a multi-stage Node 22 Alpine build
+- Development Dockerfile using Node 22 Alpine with nodemon
+- Local Kubernetes manifests under `k8s/local`
+- EKS Kubernetes manifests under `k8s/eks`
+- MongoDB StatefulSet with 3 replica set members and persistent storage
+- MongoDB replica set initialization job
+- ClusterIP services for internal pod communication
+- NGINX Ingress for public HTTP access
+- HPA that scales the backend from 1 to 5 pods at 70% CPU utilization
+- eksctl cluster config for spinning up the EKS cluster
 
-## Project structure
+## Project Structure
 
-- `src/server.js` starts Express, connects to MongoDB, registers middleware, and exposes health routes.
-- `src/routes/routes.js` defines the posts CRUD API.
-- `src/models/Post.js` defines the Mongoose post schema.
-- `Dockerfile` builds the production container image.
-- `Dockerfile.dev` runs the app with nodemon during development.
-- `k8s/local` contains the local Kubernetes manifests.
-- `k8s/eks` contains the EKS Kubernetes manifests.
-- `eks-cluster.yaml` defines the EKS cluster used by eksctl.
-- `instructions.md` contains the EKS rerun, testing, failover, and cleanup workflow.
+- `src/server.js` — starts Express, connects to MongoDB, registers middleware, and mounts health routes
+- `src/routes/routes.js` — defines the posts CRUD API
+- `src/models/Post.js` — Mongoose post schema
+- `Dockerfile` — production container image
+- `Dockerfile.dev` — development image with nodemon
+- `k8s/local/` — local Kubernetes manifests
+- `k8s/eks/` — EKS Kubernetes manifests
+- `eks-cluster.yaml` — EKS cluster definition for eksctl
+- `instructions.md` — full workflow for deploying, testing, and cleaning up on EKS
 
-## API behavior
+## API Behavior
 
 The API runs on port `3000` by default.
 
-- `GET /` returns a basic running message and the main endpoint paths.
-- `GET /health` returns API health and MongoDB connection status.
-- `GET /cpu` creates short CPU load for HPA testing.
-- `POST /api/posts` creates a post.
-- `GET /api/posts` lists posts from newest to oldest.
-- `GET /api/posts/:id` returns one post by ID.
-- `PUT /api/posts/:id` updates one post by ID.
-- `DELETE /api/posts/:id` deletes one post by ID.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Returns a basic running message with available endpoint paths |
+| GET | `/health` | Returns API health and MongoDB connection status |
+| GET | `/cpu` | Generates a short CPU spike for HPA testing |
+| POST | `/api/posts` | Creates a post |
+| GET | `/api/posts` | Lists all posts, newest first |
+| GET | `/api/posts/:id` | Returns a single post by ID |
+| PUT | `/api/posts/:id` | Updates a post by ID |
+| DELETE | `/api/posts/:id` | Deletes a post by ID |
 
-A post contains:
+A post looks like this:
 
 ```json
 {
@@ -78,75 +79,69 @@ A post contains:
 }
 ```
 
-`title` and `content` are required. `author` defaults to `Anonymous`.
+`title` and `content` are required. `author` is optional and defaults to `Anonymous`.
 
-## Runtime configuration
+## Runtime Configuration
 
-The app reads these environment variables:
+The app reads from three environment variables:
 
-- `NODE_ENV` sets the app environment.
-- `PORT` sets the API port.
-- `MONGO_URI` sets the MongoDB connection string.
+- `NODE_ENV` — sets the environment (development, production)
+- `PORT` — overrides the default port
+- `MONGO_URI` — MongoDB connection string
 
-Local development uses `.env.example` as the template. Kubernetes uses a ConfigMap for `NODE_ENV` and `PORT`, and a Secret for `MONGO_URI`.
+For local development, copy `.env.example` and fill in your values. On Kubernetes, `NODE_ENV` and `PORT` come from a ConfigMap, and `MONGO_URI` from a Secret.
 
-## Docker setup
+## Docker Setup
 
-The production image uses Node 22 Alpine. It installs production dependencies with `npm ci --omit=dev`, copies the app source, exposes port `3000`, and runs the process as the `node` user.
+The production image is built on Node 22 Alpine. Dependencies are installed with `npm ci --omit=dev` to keep the image lean, and the process runs as the `node` user rather than root.
 
-The development image also uses Node 22 Alpine and starts the app with `npm run dev`.
+The development image uses the same base and starts the app via `npm run dev` with nodemon watching for changes.
 
-## Docker Hub image
+## Docker Hub Image
 
-The production image used by EKS is:
+The production image used by the EKS deployment is:
 
-```text
+```
 qasem2002/posts-backend-api:1.1
 ```
 
-The EKS Deployment pulls this image with `imagePullPolicy: Always`.
+The EKS Deployment manifest pulls it with `imagePullPolicy: Always`.
 
-## Kubernetes setup
+## Kubernetes Setup
 
-The local and EKS manifests follow the same main structure:
+Both the local and EKS manifests share the same overall structure, with the main difference being the container image reference:
 
-- Namespace `posts-app`.
-- Backend Deployment.
-- Backend ClusterIP Service.
-- Backend ConfigMap.
-- Backend Secret.
-- MongoDB headless Service.
-- MongoDB StatefulSet.
-- MongoDB replica set initialization Job.
-- HPA for backend scaling.
-- Ingress for external HTTP routing.
+- Namespace: `posts-app`
+- Backend Deployment + ClusterIP Service
+- ConfigMap and Secret for environment config
+- MongoDB headless Service + StatefulSet (3 members)
+- Replica set initialization Job
+- HPA targeting 70% CPU across 1–5 backend replicas
+- Ingress for external HTTP routing
 
-The local deployment uses image `posts-backend-api:local`. The EKS deployment uses image `qasem2002/posts-backend-api:1.1`.
+Local uses `posts-backend-api:local`. EKS uses `qasem2002/posts-backend-api:1.1`.
 
-## EKS setup
+## EKS Setup
 
-`eks-cluster.yaml` defines the EKS cluster:
+The cluster is defined in `eks-cluster.yaml` and managed with eksctl:
 
-- Cluster name `posts-api-cluster`.
-- Region `eu-north-1`.
-- Kubernetes version `1.31`.
-- Availability zones `eu-north-1a` and `eu-north-1b`.
-- Managed node group `posts-workers`.
-- Worker node type `t3.small`.
-- Desired capacity of 3 nodes.
-- Minimum node count of 2.
-- Maximum node count of 4.
-- Node volume size of 20 GB.
+- Cluster name: `posts-api-cluster`
+- Region: `eu-north-1`
+- Kubernetes version: `1.31`
+- Availability zones: `eu-north-1a` and `eu-north-1b`
+- Node group: `posts-workers` using `t3.small` instances
+- Node capacity: desired 3, min 2, max 4
+- Node volume size: 20 GB
 
-The EKS MongoDB StatefulSet uses `storageClassName: gp2` for PersistentVolumeClaims. The EBS CSI driver must exist on the cluster before MongoDB PVCs bind correctly.
+MongoDB PVCs use `storageClassName: gp2`, so the EBS CSI driver needs to be installed before applying the StatefulSet — the instructions.md covers this.
 
-## Validation summary
+## Validation
 
-The deployment was validated on AWS EKS by checking:
+The deployment was tested end-to-end on AWS EKS. Here's what was verified:
 
-- API access through the NGINX Ingress LoadBalancer.
-- Successful post creation and retrieval through the public endpoint.
-- MongoDB replica set status with 1 PRIMARY and 2 SECONDARY members.
-- HPA scaling from 1 backend pod to 5 backend pods under CPU load.
-- Backend pod deletion and automatic recovery through the Deployment.
-- MongoDB pod deletion and data persistence through StatefulSet PVCs.
+- API responding correctly through the NGINX Ingress LoadBalancer external DNS
+- Post creation and retrieval working through the public endpoint
+- MongoDB replica set healthy with 1 PRIMARY and 2 SECONDARY members
+- HPA successfully scaled the backend from 1 pod up to 5 under sustained CPU load. After the load generator is removed, Kubernetes gradually scales replicas down after a stabilization period.
+- Backend pod deletion triggering automatic recovery via the Deployment
+- MongoDB pod deletion (including `mongo-0`) with data intact afterward, confirmed by querying posts through the API

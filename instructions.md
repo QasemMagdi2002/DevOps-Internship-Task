@@ -1,20 +1,24 @@
-# AWS EKS Rerun Steps
+# AWS EKS Deployment Instructions
 
-Cluster deletion completed successfully. Recreate the cluster anytime.
+The cluster has been torn down. Use this document to bring everything back up from scratch.
 
-When the cluster gets recreated, the EBS CSI driver setup must run again unless that setup gets baked into `eks-cluster.yaml`. Deleting the EKS cluster also deletes the EBS CSI add-on, OIDC provider, IAM role, node group, and cluster resources.
+One important note: deleting the EKS cluster removes the EBS CSI add-on, OIDC provider, IAM role, node group, and all cluster resources. That means the EBS CSI driver setup needs to run again each time unless you bake it into `eks-cluster.yaml`. The steps below cover everything.
 
-Use this workflow from the project root.
+Run all commands from the project root.
+
+---
 
 ## Prerequisites
 
-- AWS CLI configured with permissions to create EKS resources.
-- eksctl installed.
-- kubectl installed.
-- Helm installed.
-- Docker installed.
+- AWS CLI configured with permissions to create EKS resources
+- eksctl installed
+- kubectl installed
+- Helm installed
+- Docker installed
 
-## 1. Create the EKS cluster
+---
+
+## 1. Create the EKS Cluster
 
 ```powershell
 cd D:\Projects\DevOps-Internship-Task
@@ -22,9 +26,9 @@ cd D:\Projects\DevOps-Internship-Task
 eksctl create cluster -f eks-cluster.yaml
 ```
 
-Wait until cluster creation finishes.
+This takes a few minutes. Wait for it to finish before moving on.
 
-Verify:
+Verify the cluster came up cleanly:
 
 ```powershell
 kubectl get nodes
@@ -32,7 +36,9 @@ kubectl get pods -A
 kubectl top nodes
 ```
 
-## 2. Install NGINX Ingress Controller
+---
+
+## 2. Install the NGINX Ingress Controller
 
 ```powershell
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
@@ -46,18 +52,20 @@ helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx `
   --set controller.service.type=LoadBalancer
 ```
 
-Verify:
+Verify the controller is running and has received an external AWS DNS name:
 
 ```powershell
 kubectl get pods -n ingress-nginx
 kubectl get svc -n ingress-nginx
 ```
 
-Wait until `ingress-nginx-controller` receives an external AWS DNS name.
+Don't proceed to the next step until the `ingress-nginx-controller` service shows an external hostname. It can take a minute or two.
 
-## 3. Install AWS EBS CSI Driver
+---
 
-MongoDB PersistentVolumeClaims on EKS require the EBS CSI driver.
+## 3. Install the AWS EBS CSI Driver
+
+MongoDB PersistentVolumeClaims won't bind on EKS without this. The steps below set up the OIDC provider, create the IAM role, and install the add-on.
 
 ```powershell
 eksctl utils associate-iam-oidc-provider `
@@ -94,16 +102,18 @@ eksctl create addon `
   --force
 ```
 
-Verify:
+Verify the driver pods are running and the storage class is available:
 
 ```powershell
 kubectl get pods -n kube-system | findstr ebs
 kubectl get storageclass
 ```
 
-Expected result: EBS CSI pods show as running.
+---
 
-## 4. Deploy the application foundation
+## 4. Deploy the Application Foundation
+
+Apply the namespace, config, and MongoDB manifests in order:
 
 ```powershell
 kubectl apply -f k8s/eks/namespace.yml
@@ -113,60 +123,59 @@ kubectl apply -f k8s/eks/service.yaml
 kubectl apply -f k8s/eks/statefulset.yaml
 ```
 
-Watch MongoDB:
+Watch the MongoDB pods come up:
 
 ```powershell
 kubectl get pods -n posts-app -w
 ```
 
-Expected result:
+All three should reach `1/1 Running`:
 
-```text
+```
 mongo-0   1/1 Running
 mongo-1   1/1 Running
 mongo-2   1/1 Running
 ```
 
-Check PVCs:
+Then confirm the PVCs bound correctly to gp2 volumes:
 
 ```powershell
 kubectl get pvc -n posts-app
 ```
 
-Expected result:
-
-```text
+```
 mongo-data-mongo-0   Bound   ...   gp2
 mongo-data-mongo-1   Bound   ...   gp2
 mongo-data-mongo-2   Bound   ...   gp2
 ```
 
-## 5. Initialize MongoDB Replica Set
+If any PVC is stuck in `Pending`, the EBS CSI driver likely isn't ready yet — give it another minute and check the driver pods again.
+
+---
+
+## 5. Initialize the MongoDB Replica Set
 
 ```powershell
 kubectl apply -f k8s/eks/replicaset.yaml
 ```
 
-Check job logs:
+Check the job completed successfully:
 
 ```powershell
 kubectl logs job/mongo-init-replica-set -n posts-app
 ```
 
-Verify replica set:
+Then confirm replica set status directly on `mongo-0`:
 
 ```powershell
 kubectl exec -it mongo-0 -n posts-app -- mongosh --eval "rs.status()"
 ```
 
-Expected result:
+You should see 1 PRIMARY and 2 SECONDARY members. If the job fails or the replica set shows an unexpected state, check whether all three MongoDB pods were fully running before this step.
 
-```text
-1 PRIMARY
-2 SECONDARY
-```
+---
 
-## 6. Deploy backend, HPA, and Ingress
+## 6. Deploy the Backend, HPA, and Ingress
 
 ```powershell
 kubectl apply -f k8s/eks/deployment.yaml
@@ -174,7 +183,7 @@ kubectl apply -f k8s/eks/hpa.yaml
 kubectl apply -f k8s/eks/ingress.yaml
 ```
 
-Check:
+Verify everything is running:
 
 ```powershell
 kubectl get all -n posts-app
@@ -182,33 +191,35 @@ kubectl get hpa -n posts-app
 kubectl get ingress -n posts-app
 ```
 
-## 7. Test API through Ingress
+---
 
-Get the LoadBalancer DNS:
+## 7. Test the API Through Ingress
+
+Get the LoadBalancer external DNS:
 
 ```powershell
 kubectl get svc ingress-nginx-controller -n ingress-nginx
 ```
 
-Set it:
+Set it as a variable so the curl commands below are less repetitive:
 
 ```powershell
 $LB="YOUR_LOAD_BALANCER_DNS_HERE"
 ```
 
-Test health:
+Check health:
 
 ```powershell
 curl http://$LB/health
 ```
 
-Test posts:
+List posts (empty at first):
 
 ```powershell
 curl http://$LB/api/posts
 ```
 
-Create a post:
+Create a test post:
 
 ```powershell
 Invoke-RestMethod `
@@ -218,82 +229,80 @@ Invoke-RestMethod `
   -Body '{"title":"EKS Ingress Test","content":"Created through AWS EKS Ingress","author":"Qasem"}'
 ```
 
-Confirm:
+Confirm it was saved:
 
 ```powershell
 curl http://$LB/api/posts
 ```
 
-## 8. Test HPA autoscaling
+---
 
-Start load generator:
+## 8. Test HPA Autoscaling
+
+Start a load generator that hammers the `/cpu` endpoint:
 
 ```powershell
 kubectl run load-generator -n posts-app --image=busybox:1.36 --restart=Never -- /bin/sh -c "while true; do wget -q -O- http://posts-backend-service/cpu; done"
 ```
 
-Watch HPA:
+Watch HPA metrics update in one terminal:
 
 ```powershell
 kubectl get hpa -n posts-app -w
 ```
 
-In another terminal:
+And backend pod count in another:
 
 ```powershell
 kubectl get pods -n posts-app -w
 ```
 
-Expected result:
-
-```text
-Backend replicas scale from 1 to 5
-```
-
-Stop load generator:
+The backend should scale from 1 replica up to 5. Once you stop the load generator, Kubernetes will scale it back down — this takes a few minutes since it deliberately avoids flapping.
 
 ```powershell
 kubectl delete pod load-generator -n posts-app
 ```
 
-After the load generator is deleted, HPA may take a few minutes to scale the backend down. This delay is normal because Kubernetes avoids rapid scaling changes.
+---
 
-## 9. Test failover
+## 9. Test Failover
 
-Delete backend pod:
+**Backend pod recovery:**
+
+Delete the running backend pod and immediately check whether the API stays responsive:
 
 ```powershell
 kubectl delete pod -n posts-app -l app=posts-backend
-```
-
-Check API health and posts:
-
-```powershell
 curl http://$LB/health
 curl http://$LB/api/posts
 ```
 
-Delete MongoDB pod:
+The Deployment should bring a replacement up quickly.
+
+**MongoDB pod recovery and data persistence:**
+
+Delete `mongo-0` (the PRIMARY) and wait for it to come back:
 
 ```powershell
 kubectl delete pod mongo-0 -n posts-app
-```
-
-Wait until it returns:
-
-```powershell
 kubectl get pods -n posts-app -w
 ```
 
-Confirm data still exists:
+Once it rejoins the replica set, verify the data is still there:
 
 ```powershell
 curl http://$LB/api/posts
 ```
 
-## 10. Cleanup to avoid AWS charges
+The posts you created earlier should still be present. The StatefulSet PVC keeps the data on the EBS volume even when the pod restarts.
 
-Deleting the EKS cluster removes the running Kubernetes resources and persistent volumes. MongoDB data persistence is demonstrated during pod deletion while the cluster is still running, not after deleting the full cluster.
+---
+
+## 10. Cleanup
+
+> **Note:** Data persistence is demonstrated during pod deletion while the cluster is still running. Deleting the cluster itself removes everything including the EBS volumes, so do the failover tests before this step.
+
+Delete the application namespaces first:
 
 ```powershell
 kubectl delete namespace posts-app
@@ -306,13 +315,11 @@ Then delete the cluster:
 eksctl delete cluster --name posts-api-cluster --region eu-north-1
 ```
 
-After deletion, check the AWS Console for leftovers:
+After deletion, check the AWS Console for anything that didn't clean up automatically:
 
-```text
-EKS clusters
-EC2 Load Balancers
-EC2 Volumes
-CloudFormation stacks
-```
+- EKS clusters
+- EC2 Load Balancers
+- EC2 Volumes
+- CloudFormation stacks
 
-The EKS deployment was proven working, including Ingress, HPA scaling, MongoDB pod recovery, and persistent data after pod deletion.
+Leftover volumes and load balancers will continue incurring charges if not removed.
