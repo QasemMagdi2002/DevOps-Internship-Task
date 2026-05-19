@@ -44,6 +44,18 @@ app.get("/health", (req, res) => {
   });
 });
 
+app.get("/cpu", (req, res) => {
+  const end = Date.now() + 700;
+
+  while (Date.now() < end) {
+    Math.sqrt(Math.random());
+  }
+
+  res.status(200).json({
+    message: "CPU load generated"
+  });
+});
+
 app.use("/api/posts", postsRoutes);
 
 if (!MONGO_URI) {

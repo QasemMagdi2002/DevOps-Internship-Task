@@ -1,0 +1,20 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: posts-api-cluster
+  region: eu-north-1
+  version: "1.31"
+
+availabilityZones:
+  - eu-north-1a
+  - eu-north-1b
+
+managedNodeGroups:
+  - name: posts-workers
+    instanceType: t3.small
+    desiredCapacity: 3
+    minSize: 2
+    maxSize: 4
+    volumeSize: 20
+    privateNetworking: false
