@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongo-init-replica-set
+  namespace: posts-app
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: mongo-init-replica-set
+        image: mongo:7.0
+        imagePullPolicy: IfNotPresent
+        command:
+        - sh
+        - -c
+        - |
+          for i in 0 1 2; do
+            until mongosh --host mongo-$i.mongo-headless:27017 --eval "db.adminCommand('ping')" >/dev/null 2>&1; do
+              echo "Waiting for mongo-$i..."
+              sleep 2
+            done
+          done
+
+          mongosh --host mongo-0.mongo-headless:27017 --eval '
+            const cfg = {
+              _id: "rs0",
+              members: [
+                { _id: 0, host: "mongo-0.mongo-headless:27017" },
+                { _id: 1, host: "mongo-1.mongo-headless:27017" },
+                { _id: 2, host: "mongo-2.mongo-headless:27017" }
+              ]
+            };
+
+            try {
+              const status = rs.status();
+              print("Replica set already initialized: " + status.set);
+            } catch (error) {
+              print("Initializing MongoDB replica set rs0");
+              rs.initiate(cfg);
+            }
+          '
